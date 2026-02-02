@@ -16,8 +16,3 @@ export interface Particle {
   color: string;
   life: number;
 }
-
-export interface MousePosition {
-  x: number;
-  y: number;
-}

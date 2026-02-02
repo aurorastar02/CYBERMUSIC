@@ -3,6 +3,12 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Visualizer from './components/Visualizer';
 import Controls from './components/Controls';
 
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 const App: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -78,7 +84,6 @@ const App: React.FC = () => {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-    // Note: We keep the audio context and source connected for the next track
   };
 
   const onTimeUpdate = () => {
@@ -102,7 +107,7 @@ const App: React.FC = () => {
   }, [audioUrl]);
 
   return (
-    <div className="relative w-full h-screen bg-[#050505] overflow-hidden">
+    <div className="relative w-full h-screen bg-[#050505] overflow-hidden select-none">
       {/* Background Subtle Gradient */}
       <div className="absolute inset-0 bg-gradient-to-tr from-[#0a0514] via-black to-[#05140a] opacity-50 pointer-events-none" />
 
@@ -112,7 +117,7 @@ const App: React.FC = () => {
       {/* Interface Overlay */}
       <div className="absolute inset-0 flex flex-col justify-between p-8 pointer-events-none">
         <header className="flex items-center space-x-4">
-          <div className="w-10 h-10 border-2 border-cyan-500 rounded-sm flex items-center justify-center rotate-45">
+          <div className="w-10 h-10 border-2 border-cyan-500 rounded-sm flex items-center justify-center rotate-45 shadow-[0_0_10px_rgba(6,182,212,0.5)]">
             <div className="w-4 h-4 bg-cyan-400 animate-pulse -rotate-45" />
           </div>
           <div>
@@ -120,12 +125,13 @@ const App: React.FC = () => {
               Cyber<span className="text-cyan-400">Pulse</span>
             </h1>
             <p className="text-[10px] text-cyan-800 uppercase tracking-widest font-mono">
-              Advanced Audio Analytics v2.0
+              Advanced Audio Analytics v2.1
             </p>
           </div>
         </header>
 
-        <div className="flex flex-col items-center pointer-events-auto">
+        {/* Playback & Volume Controls (Center-Bottom) */}
+        <div className="flex flex-col items-center pointer-events-auto mb-16">
           <Controls 
             onUpload={handleFileUpload} 
             onTogglePlay={togglePlay} 
@@ -133,9 +139,6 @@ const App: React.FC = () => {
             hasAudio={!!audioUrl}
             volume={volume}
             onVolumeChange={handleVolumeChange}
-            currentTime={currentTime}
-            duration={duration}
-            onSeek={handleSeek}
             onEject={handleEject}
           />
           {audioUrl && (
@@ -150,12 +153,49 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <footer className="flex justify-between items-end font-mono text-[10px] text-gray-500">
+        {/* Global Progress Bar (Fixed Bottom) */}
+        {audioUrl && (
+          <div className="absolute bottom-0 left-0 w-full p-6 pb-4 pointer-events-auto bg-gradient-to-t from-black/80 to-transparent">
+            <div className="max-w-4xl mx-auto space-y-2">
+              <div className="flex justify-between items-end text-[10px] font-mono text-cyan-500/80 uppercase tracking-[0.2em]">
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-xs text-cyan-400">{formatTime(currentTime)}</span>
+                  <span className="opacity-40">/ {formatTime(duration)}</span>
+                </div>
+                <div className="hidden sm:block opacity-40">Stream_Sync: Active</div>
+              </div>
+              
+              <div className="relative group h-1 w-full bg-white/5 rounded-full overflow-hidden cursor-pointer">
+                <input
+                  type="range"
+                  min="0"
+                  max={duration || 0}
+                  step="0.01"
+                  value={currentTime}
+                  onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                />
+                <div 
+                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-600 to-pink-500 shadow-[0_0_15px_rgba(6,182,212,0.8)] transition-all duration-100 z-10"
+                  style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                />
+                {/* Visual Glow Line */}
+                <div 
+                  className="absolute top-0 left-0 h-full w-full bg-cyan-400/10 z-0"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <footer className="flex justify-between items-end font-mono text-[9px] text-gray-600 uppercase tracking-widest mt-auto mb-2">
           <div className="space-y-1">
-            <p>SYSTEM_STATUS: {isPlaying ? 'VISUALIZING' : 'STANDBY'}</p>
+            <p className={isPlaying ? "text-cyan-500 animate-pulse" : ""}>
+              SYSTEM_STATUS: {isPlaying ? 'VISUALIZING' : 'STANDBY'}
+            </p>
             <p>LATENCY_BUFFER: 2.4MS</p>
           </div>
-          <div className="text-right space-y-1">
+          <div className="text-right space-y-1 hidden sm:block">
             <p>FFT_SIZE: 128</p>
             <p>SAMP_RATE: 44.1KHZ</p>
           </div>
