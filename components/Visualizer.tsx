@@ -1,197 +1,203 @@
 
-import React, { useRef, useEffect } from 'react';
-import { Particle } from '../types';
+import React, { useRef, useMemo, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Stars, PerspectiveCamera, Float } from '@react-three/drei';
+import { Physics, useSphere, useBox } from '@react-three/cannon';
+import * as THREE from 'three';
+
+// Define local aliases for R3F intrinsic elements to bypass JSX type errors in environments
+// where the global JSX.IntrinsicElements is not properly augmented by @react-three/fiber.
+const mesh = 'mesh' as any;
+const boxGeometry = 'boxGeometry' as any;
+const meshStandardMaterial = 'meshStandardMaterial' as any;
+const sphereGeometry = 'sphereGeometry' as any;
+const pointLight = 'pointLight' as any;
+const color = 'color' as any;
+const ambientLight = 'ambientLight' as any;
+const spotLight = 'spotLight' as any;
+const planeGeometry = 'planeGeometry' as any;
+const gridHelper = 'gridHelper' as any;
 
 interface VisualizerProps {
   analyzer: AnalyserNode | null;
   isPlaying: boolean;
 }
 
-const Visualizer: React.FC<VisualizerProps> = ({ analyzer, isPlaying }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const particlesRef = useRef<Particle[]>([]);
-  const requestRef = useRef<number | undefined>(undefined);
+// 單個音階柱組件
+const FrequencyBar = ({ index, total, analyzer }: { index: number, total: number, analyzer: AnalyserNode | null }) => {
+  const angle = (index / total) * Math.PI * 2;
+  const radius = 8;
+  const x = Math.cos(angle) * radius;
+  const z = Math.sin(angle) * radius;
+  
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hit, setHit] = useState(0);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // 物理實體（靜態）
+  const [ref] = useBox(() => ({
+    type: 'Static',
+    position: [x, 0, z],
+    rotation: [0, -angle, 0],
+    args: [0.5, 2, 0.5],
+    onCollide: () => setHit(1)
+  }));
 
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return;
+  useFrame(() => {
+    if (!analyzer || !meshRef.current) return;
+    
+    const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+    analyzer.getByteFrequencyData(dataArray);
+    
+    // 對應頻段數據
+    const val = dataArray[index % 64] / 255;
+    const targetScaleY = 0.5 + val * 10;
+    
+    // 平滑高度變化
+    meshRef.current.scale.y = THREE.MathUtils.lerp(meshRef.current.scale.y, targetScaleY, 0.2);
+    meshRef.current.position.y = meshRef.current.scale.y / 2;
 
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.addEventListener('resize', resize);
-    resize();
+    // 碰撞閃爍衰減
+    if (hit > 0) setHit(h => h * 0.9);
+  });
 
-    // 初始化背景粒子
-    particlesRef.current = Array.from({ length: 100 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.5,
-      size: Math.random() * 1.2,
-      color: 'rgba(255, 255, 255, 0.2)',
-      life: Math.random()
-    }));
-
-    const bufferLength = 64; // 與 App.tsx 中的 fftSize 相對應 (128/2)
-    const dataArray = new Uint8Array(bufferLength);
-
-    const render = () => {
-      if (analyzer && isPlaying) {
-        analyzer.getByteFrequencyData(dataArray);
-      } else {
-        dataArray.fill(0);
-      }
-
-      // 1. 清除畫布並繪製深色背景
-      ctx.fillStyle = '#050505';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const minDimension = Math.min(canvas.width, canvas.height);
-      const innerRadius = minDimension * 0.15; // 圓環內徑
-      
-      // 2. 計算低音振幅 (Bass: 索引 0-10)
-      let bassSum = 0;
-      for (let i = 0; i < 10; i++) {
-        bassSum += dataArray[i];
-      }
-      const avgBass = bassSum / 10;
-      const normalizedBass = avgBass / 255;
-
-      // 3. 繪製背景裝飾：科技感網格
-      drawGrid(ctx, canvas);
-      drawParticles(ctx, canvas, normalizedBass);
-
-      // 4. 繪製環狀音階 (Circular Spectrum)
-      for (let i = 0; i < bufferLength; i++) {
-        const amplitude = dataArray[i];
-        const normalizedAmp = amplitude / 255;
-        
-        // 極座標計算
-        const angle = (i / bufferLength) * Math.PI * 2;
-        const barHeight = normalizedAmp * minDimension * 0.25;
-        
-        const x1 = centerX + Math.cos(angle) * innerRadius;
-        const y1 = centerY + Math.sin(angle) * innerRadius;
-        const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight + (normalizedBass * 20));
-        const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight + (normalizedBass * 20));
-
-        // 彩虹漸變：HSL 色相隨索引值變動 (0 - 360)
-        const hue = (i / bufferLength) * 360;
-        const color = `hsl(${hue}, 80%, 60%)`;
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        
-        // 繪圖樣式
-        ctx.lineWidth = (minDimension / bufferLength) * 0.8;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = color;
-        
-        // 增加霓虹發光感
-        ctx.shadowBlur = normalizedAmp * 15;
-        ctx.shadowColor = color;
-        
-        ctx.stroke();
-      }
-      ctx.shadowBlur = 0; // 重置發光
-
-      // 5. 繪製跳動能量球 (Bouncing Beat Ball)
-      drawBeatBall(ctx, centerX, centerY, innerRadius, normalizedBass);
-
-      // 6. 全局特效：色散 (強低音時觸發)
-      if (normalizedBass > 0.6 && isPlaying) {
-        ctx.globalCompositeOperation = 'screen';
-        ctx.drawImage(canvas, 3, 0);
-        ctx.drawImage(canvas, -3, 0);
-        ctx.globalCompositeOperation = 'source-over';
-      }
-
-      requestRef.current = requestAnimationFrame(render);
-    };
-
-    const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
-      ctx.lineWidth = 1;
-      const step = 50;
-      for (let x = 0; x < canvas.width; x += step) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += step) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      }
-    };
-
-    const drawParticles = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, bass: number) => {
-      particlesRef.current.forEach(p => {
-        p.x += p.vx * (1 + bass * 5);
-        p.y += p.vy * (1 + bass * 5);
-        if (p.x < 0) p.x = canvas.width;
-        if (p.x > canvas.width) p.x = 0;
-        if (p.y < 0) p.y = canvas.height;
-        if (p.y > canvas.height) p.y = 0;
-
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.1 + bass * 0.2})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    };
-
-    const drawBeatBall = (ctx: CanvasRenderingContext2D, x: number, y: number, baseRadius: number, bass: number) => {
-      const ballRadius = baseRadius * 0.6 * (1 + bass * 0.4);
-      
-      // 球體徑向漸變
-      const gradient = ctx.createRadialGradient(
-        x - ballRadius * 0.2, 
-        y - ballRadius * 0.2, 
-        ballRadius * 0.1, 
-        x, y, ballRadius
-      );
-      
-      // 根據低音強弱改變球體核心顏色
-      const hue = bass * 60; // 在紅色到黃色之間切換
-      gradient.addColorStop(0, `hsl(${hue}, 100%, 90%)`);
-      gradient.addColorStop(0.5, `hsl(${hue}, 80%, 50%)`);
-      gradient.addColorStop(1, '#000');
-
-      ctx.beginPath();
-      ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
-      
-      // 球體外發光
-      ctx.shadowBlur = 30 + bass * 50;
-      ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
-      
-      ctx.fillStyle = gradient;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      // 裝飾性的環結構
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.2 + bass * 0.5})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(x, y, ballRadius * 1.2, 0, Math.PI * 2);
-      ctx.stroke();
-    };
-
-    requestRef.current = requestAnimationFrame(render);
-
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      window.removeEventListener('resize', resize);
-    };
-  }, [analyzer, isPlaying]);
+  const hue = (index / total) * 360;
+  const colorVal = new THREE.Color(`hsl(${hue}, 80%, 50%)`);
 
   return (
-    <div className="w-full h-full relative">
-      <canvas ref={canvasRef} className="w-full h-full" />
+    <mesh ref={mergeRefs(meshRef, ref)}>
+      <boxGeometry args={[0.5, 1, 0.5]} />
+      <meshStandardMaterial 
+        color={colorVal} 
+        emissive={colorVal}
+        emissiveIntensity={0.5 + hit * 5}
+        metalness={0.8}
+        roughness={0.2}
+      />
+    </mesh>
+  );
+};
+
+// 中心物理球組件
+const PulseBall = ({ analyzer, isPlaying }: { analyzer: AnalyserNode | null, isPlaying: boolean }) => {
+  const [ref, api] = useSphere(() => ({
+    mass: 1,
+    position: [0, 5, 0],
+    args: [1.2],
+    linearDamping: 0.4,
+    angularDamping: 0.4,
+  }));
+
+  const lastBassRef = useRef(0);
+  const pos = useRef([0, 0, 0]);
+
+  // 訂閱物理位置
+  useMemo(() => api.position.subscribe(v => pos.current = v), [api]);
+
+  useFrame(() => {
+    if (!analyzer || !isPlaying) return;
+
+    const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+    analyzer.getByteFrequencyData(dataArray);
+    
+    // 計算低音平均 (Bass 0-5)
+    let bassSum = 0;
+    for (let i = 0; i < 5; i++) bassSum += dataArray[i];
+    const avgBass = bassSum / 5 / 255;
+
+    // 向心引力：讓球體傾向回到中心
+    const strength = 1.5;
+    api.applyForce([
+      -pos.current[0] * strength,
+      (2 - pos.current[1]) * strength, // 懸浮在 Y=2
+      -pos.current[2] * strength
+    ], [0, 0, 0]);
+
+    // 節拍偵測 (Peak Detection)
+    const threshold = 0.15;
+    const delta = avgBass - lastBassRef.current;
+    
+    if (delta > threshold) {
+      // 爆炸彈射！隨機方向衝量
+      const force = 15 + delta * 20;
+      const phi = Math.random() * Math.PI * 2;
+      const theta = Math.random() * Math.PI;
+      
+      api.applyImpulse([
+        Math.sin(theta) * Math.cos(phi) * force,
+        Math.cos(theta) * force * 0.5,
+        Math.sin(theta) * Math.sin(phi) * force
+      ], [0, 0, 0]);
+    }
+    
+    lastBassRef.current = avgBass;
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <sphereGeometry args={[1.2, 32, 32]} />
+      <meshStandardMaterial 
+        color="#ffffff" 
+        emissive="#00f2ff" 
+        emissiveIntensity={2}
+        metalness={1}
+        roughness={0}
+      />
+      <pointLight intensity={10} color="#00f2ff" distance={10} />
+    </mesh>
+  );
+};
+
+// 輔助函式：合併 Refs
+function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined>): React.RefCallback<T> {
+  return (value) => {
+    refs.forEach((ref) => {
+      if (typeof ref === 'function') ref(value);
+      else if (ref) (ref as any).current = value;
+    });
+  };
+}
+
+const Visualizer: React.FC<VisualizerProps> = ({ analyzer, isPlaying }) => {
+  return (
+    <div className="w-full h-full">
+      <Canvas shadows dpr={[1, 2]}>
+        <PerspectiveCamera makeDefault position={[0, 15, 20]} fov={50} />
+        <color attach="background" args={['#050505']} />
+        
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} intensity={1.5} castShadow />
+        <spotLight position={[-10, 20, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
+
+        <Physics gravity={[0, -9.81, 0]}>
+          {/* 地面 */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+            <planeGeometry args={[100, 100]} />
+            <meshStandardMaterial color="#0a0a0a" opacity={0.5} transparent />
+          </mesh>
+
+          {/* 64 根音階柱 */}
+          {Array.from({ length: 64 }).map((_, i) => (
+            <FrequencyBar key={i} index={i} total={64} analyzer={analyzer} />
+          ))}
+
+          {/* 物理能量球 */}
+          <PulseBall analyzer={analyzer} isPlaying={isPlaying} />
+        </Physics>
+
+        {/* 背景裝飾 */}
+        <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+        <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+            <gridHelper args={[100, 50, 0x111111, 0x050505]} position={[0, -0.4, 0]} />
+        </Float>
+
+        <OrbitControls 
+          enableDamping 
+          dampingFactor={0.05} 
+          maxPolarAngle={Math.PI / 2.1} 
+          minDistance={5} 
+          maxDistance={40}
+        />
+      </Canvas>
     </div>
   );
 };
