@@ -40,7 +40,6 @@ const App: React.FC = () => {
     if (!sourceRef.current) {
       sourceRef.current = ctx.createMediaElementSource(audioRef.current);
       analyzerRef.current = ctx.createAnalyser();
-      // 我們需要 64 個頻段，所以 fftSize 設為 128 (128 / 2 = 64)
       analyzerRef.current.fftSize = 128; 
       sourceRef.current.connect(analyzerRef.current);
       analyzerRef.current.connect(ctx.destination);
@@ -74,6 +73,13 @@ const App: React.FC = () => {
     if (audioRef.current) {
       audioRef.current.currentTime = time;
       setCurrentTime(time);
+      
+      // Auto-play on seek if not already playing
+      if (!isPlaying) {
+        setupAudio();
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
     }
   };
 
@@ -130,62 +136,66 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        {/* Playback Controls */}
-        <div className="flex flex-col items-center pointer-events-auto mb-20">
-          <Controls 
-            onUpload={handleFileUpload} 
-            onTogglePlay={togglePlay} 
-            isPlaying={isPlaying} 
-            hasAudio={!!audioUrl}
-            volume={volume}
-            onVolumeChange={handleVolumeChange}
-            onEject={handleEject}
-          />
-          {audioUrl && (
-            <audio 
-              ref={audioRef} 
-              src={audioUrl} 
-              onEnded={() => setIsPlaying(false)}
-              onTimeUpdate={onTimeUpdate}
-              onLoadedMetadata={onLoadedMetadata}
-              className="hidden"
+        {/* Unified Bottom Interface */}
+        <div className="absolute bottom-0 left-0 w-full p-8 pointer-events-auto bg-gradient-to-t from-black via-black/80 to-transparent">
+          <div className="max-w-5xl mx-auto flex flex-col items-center space-y-6">
+            
+            {/* Playback & Volume Controls */}
+            <Controls 
+              onUpload={handleFileUpload} 
+              onTogglePlay={togglePlay} 
+              isPlaying={isPlaying} 
+              hasAudio={!!audioUrl}
+              volume={volume}
+              onVolumeChange={handleVolumeChange}
+              onEject={handleEject}
             />
-          )}
+
+            {/* Progress Bar Container */}
+            {audioUrl && (
+              <div className="w-full space-y-3">
+                <div className="flex justify-between items-end text-[10px] font-mono text-cyan-500/80 uppercase tracking-[0.3em]">
+                  <div className="flex items-baseline space-x-3">
+                    <span className="text-sm text-cyan-400 font-bold">{formatTime(currentTime)}</span>
+                    <span className="opacity-30">|</span>
+                    <span className="opacity-40">{formatTime(duration)}</span>
+                  </div>
+                  <div className="hidden sm:block opacity-40 animate-pulse uppercase">Sync_Buffer: {Math.round((currentTime / duration) * 100 || 0)}%</div>
+                </div>
+                
+                <div className="relative group h-2 w-full bg-white/5 rounded-full overflow-hidden cursor-pointer border border-white/5">
+                  <input
+                    type="range"
+                    min="0"
+                    max={duration || 0}
+                    step="0.01"
+                    value={currentTime}
+                    onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                  />
+                  <div 
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-600 via-pink-500 to-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.8)] transition-all duration-100 z-10"
+                    style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                  />
+                  <div className="absolute inset-0 bg-cyan-400/5 z-0" />
+                </div>
+              </div>
+            )}
+            
+            {audioUrl && (
+              <audio 
+                ref={audioRef} 
+                src={audioUrl} 
+                onEnded={() => setIsPlaying(false)}
+                onTimeUpdate={onTimeUpdate}
+                onLoadedMetadata={onLoadedMetadata}
+                className="hidden"
+              />
+            )}
+          </div>
         </div>
 
-        {/* Bottom Progress Bar */}
-        {audioUrl && (
-          <div className="absolute bottom-0 left-0 w-full p-8 pb-6 pointer-events-auto">
-            <div className="max-w-5xl mx-auto space-y-3">
-              <div className="flex justify-between items-end text-[10px] font-mono text-cyan-500/80 uppercase tracking-[0.3em]">
-                <div className="flex items-baseline space-x-3">
-                  <span className="text-sm text-cyan-400 font-bold">{formatTime(currentTime)}</span>
-                  <span className="opacity-30">|</span>
-                  <span className="opacity-40">{formatTime(duration)}</span>
-                </div>
-                <div className="hidden sm:block opacity-40 animate-pulse">PHYSICS_SYNC: ESTABLISHED</div>
-              </div>
-              
-              <div className="relative group h-1.5 w-full bg-white/5 rounded-full overflow-hidden cursor-pointer">
-                <input
-                  type="range"
-                  min="0"
-                  max={duration || 0}
-                  step="0.01"
-                  value={currentTime}
-                  onChange={(e) => handleSeek(parseFloat(e.target.value))}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                />
-                <div 
-                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-600 via-pink-500 to-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.8)] transition-all duration-100 z-10"
-                  style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        <footer className="flex justify-between items-end font-mono text-[9px] text-gray-700 uppercase tracking-widest mt-auto">
+        <footer className="flex justify-between items-end font-mono text-[9px] text-gray-700 uppercase tracking-widest mt-auto mb-32 md:mb-40">
           <div className="space-y-1">
             <p className={isPlaying ? "text-cyan-500 animate-pulse" : ""}>
               ENGINE: {isPlaying ? 'RUNNING_SIMULATION' : 'DORMANT'}

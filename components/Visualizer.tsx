@@ -7,16 +7,17 @@ import * as THREE from 'three';
 
 // Define local aliases for R3F intrinsic elements to bypass JSX type errors in environments
 // where the global JSX.IntrinsicElements is not properly augmented by @react-three/fiber.
-const mesh = 'mesh' as any;
-const boxGeometry = 'boxGeometry' as any;
-const meshStandardMaterial = 'meshStandardMaterial' as any;
-const sphereGeometry = 'sphereGeometry' as any;
-const pointLight = 'pointLight' as any;
-const color = 'color' as any;
-const ambientLight = 'ambientLight' as any;
-const spotLight = 'spotLight' as any;
-const planeGeometry = 'planeGeometry' as any;
-const gridHelper = 'gridHelper' as any;
+// Using capitalized names ensures that TypeScript treats them as component variables rather than intrinsic HTML/SVG tags.
+const Mesh = 'mesh' as any;
+const BoxGeometry = 'boxGeometry' as any;
+const MeshStandardMaterial = 'meshStandardMaterial' as any;
+const SphereGeometry = 'sphereGeometry' as any;
+const PointLight = 'pointLight' as any;
+const Color = 'color' as any;
+const AmbientLight = 'ambientLight' as any;
+const SpotLight = 'spotLight' as any;
+const PlaneGeometry = 'planeGeometry' as any;
+const GridHelper = 'gridHelper' as any;
 
 interface VisualizerProps {
   analyzer: AnalyserNode | null;
@@ -64,16 +65,17 @@ const FrequencyBar = ({ index, total, analyzer }: { index: number, total: number
   const colorVal = new THREE.Color(`hsl(${hue}, 80%, 50%)`);
 
   return (
-    <mesh ref={mergeRefs(meshRef, ref)}>
-      <boxGeometry args={[0.5, 1, 0.5]} />
-      <meshStandardMaterial 
+    /* Use the capitalized alias to avoid JSX type errors */
+    <Mesh ref={mergeRefs(meshRef, ref)}>
+      <BoxGeometry args={[0.5, 1, 0.5]} />
+      <MeshStandardMaterial 
         color={colorVal} 
         emissive={colorVal}
         emissiveIntensity={0.5 + hit * 5}
         metalness={0.8}
         roughness={0.2}
       />
-    </mesh>
+    </Mesh>
   );
 };
 
@@ -133,17 +135,18 @@ const PulseBall = ({ analyzer, isPlaying }: { analyzer: AnalyserNode | null, isP
   });
 
   return (
-    <mesh ref={ref} castShadow>
-      <sphereGeometry args={[1.2, 32, 32]} />
-      <meshStandardMaterial 
+    /* Use capitalized aliases for R3F elements */
+    <Mesh ref={ref} castShadow>
+      <SphereGeometry args={[1.2, 32, 32]} />
+      <MeshStandardMaterial 
         color="#ffffff" 
         emissive="#00f2ff" 
         emissiveIntensity={2}
         metalness={1}
         roughness={0}
       />
-      <pointLight intensity={10} color="#00f2ff" distance={10} />
-    </mesh>
+      <PointLight intensity={10} color="#00f2ff" distance={10} />
+    </Mesh>
   );
 };
 
@@ -162,18 +165,20 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyzer, isPlaying }) => {
     <div className="w-full h-full">
       <Canvas shadows dpr={[1, 2]}>
         <PerspectiveCamera makeDefault position={[0, 15, 20]} fov={50} />
-        <color attach="background" args={['#050505']} />
+        {/* Use capitalized Color alias */}
+        <Color attach="background" args={['#050505']} />
         
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={1.5} castShadow />
-        <spotLight position={[-10, 20, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
+        {/* Use capitalized light and mesh aliases */}
+        <AmbientLight intensity={0.5} />
+        <PointLight position={[10, 10, 10]} intensity={1.5} castShadow />
+        <SpotLight position={[-10, 20, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
 
         <Physics gravity={[0, -9.81, 0]}>
           {/* 地面 */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
-            <planeGeometry args={[100, 100]} />
-            <meshStandardMaterial color="#0a0a0a" opacity={0.5} transparent />
-          </mesh>
+          <Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+            <PlaneGeometry args={[100, 100]} />
+            <MeshStandardMaterial color="#0a0a0a" opacity={0.5} transparent />
+          </Mesh>
 
           {/* 64 根音階柱 */}
           {Array.from({ length: 64 }).map((_, i) => (
@@ -187,7 +192,8 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyzer, isPlaying }) => {
         {/* 背景裝飾 */}
         <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
         <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
-            <gridHelper args={[100, 50, 0x111111, 0x050505]} position={[0, -0.4, 0]} />
+            {/* Use capitalized GridHelper alias */}
+            <GridHelper args={[100, 50, 0x111111, 0x050505]} position={[0, -0.4, 0]} />
         </Float>
 
         <OrbitControls 
