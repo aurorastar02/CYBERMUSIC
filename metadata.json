@@ -1,0 +1,5 @@
+{
+  "name": "CyberPulse Audio Visualizer",
+  "description": "A high-performance cyberpunk-themed music visualization tool using Web Audio API and Canvas, featuring an energy ring, reactive particle systems, and chromatic aberration effects.",
+  "requestFramePermissions": []
+}
